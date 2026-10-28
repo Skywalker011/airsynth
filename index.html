@@ -1,0 +1,2169 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AirSynth Ambient Studio Pro | سینت‌سایزر فضایی با حرکت دست</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Vazirmatn (Persian) & JetBrains Mono / Space Grotesk (Studio HUD) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@600;700&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        :root {
+            --cyan-glow: #38bdf8;
+            --violet-glow: #c084fc;
+            --rose-glow: #f472b6;
+            --indigo-glow: #818cf8;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            font-family: 'Vazirmatn', sans-serif;
+            background-color: #03040c;
+            color: #f8fafc;
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            touch-action: none;
+            overscroll-behavior: none;
+        }
+
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+            direction: ltr;
+        }
+
+        /* Cosmic Studio Glassmorphism */
+        .studio-glass {
+            background: linear-gradient(145deg, rgba(13, 18, 38, 0.78), rgba(7, 10, 24, 0.86));
+            backdrop-filter: blur(22px);
+            -webkit-backdrop-filter: blur(22px);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.12);
+        }
+
+        .studio-pill {
+            background: rgba(15, 23, 42, 0.72);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        /* Tactile Rotary Knob Styling */
+        .rotary-knob-wrapper {
+            touch-action: none;
+            cursor: ns-resize;
+        }
+
+        .rotary-knob-ring {
+            transition: filter 0.2s ease, transform 0.15s ease;
+        }
+
+        .rotary-knob-wrapper:active .rotary-knob-ring {
+            transform: scale(1.06);
+        }
+
+        /* Custom Range Slider */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(148, 163, 184, 0.2);
+            height: 6px;
+            border-radius: 999px;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #38bdf8, #c084fc);
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.85);
+            cursor: pointer;
+        }
+
+        @keyframes pulseAura {
+            0%, 100% { box-shadow: 0 0 16px rgba(56, 189, 248, 0.35), inset 0 0 10px rgba(56, 189, 248, 0.15); }
+            50% { box-shadow: 0 0 26px rgba(192, 132, 252, 0.6), inset 0 0 14px rgba(192, 132, 252, 0.25); }
+        }
+
+        .camera-cta-glow {
+            animation: pulseAura 3.5s ease-in-out infinite;
+        }
+
+        /* Hide scrollbars on horizontal chord bar if needed */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-[100dvh] overflow-hidden select-none bg-[#03040c]">
+
+    <!-- Hidden raw webcam video element with mobile iOS/Android attributes -->
+    <video id="webcam-video" class="hidden" playsinline webkit-playsinline muted autoplay></video>
+
+    <!-- Main Interactive Nebula & Hand-Tracking Canvas -->
+    <canvas id="synth-canvas" class="absolute inset-0 w-full h-full block z-0 cursor-crosshair"></canvas>
+
+    <!-- Subtle Cosmic Edge Vignette -->
+    <div class="absolute inset-0 z-10 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_55%,rgba(2,3,10,0.82)_100%)]"></div>
+
+    <!-- ===================================================================
+         TOP FLOATING STUDIO HEADER (Mobile & Desktop Responsive)
+    ==================================================================== -->
+    <header id="ui-header" class="relative z-20 flex flex-col gap-2 px-2.5 pt-2.5 sm:px-5 sm:pt-3.5 transition-all duration-300">
+        <div class="flex items-center justify-between gap-2">
+            
+            <!-- Brand Identity & Live Status -->
+            <div class="studio-glass rounded-2xl px-3 py-1.5 sm:px-3.5 sm:py-2 flex items-center gap-2.5 shrink-0">
+                <div class="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-cyan-400/20 via-indigo-500/20 to-purple-500/20 border border-cyan-300/30">
+                    <i class="ph-fill ph-planet text-lg sm:text-xl text-cyan-300"></i>
+                    <span id="tracking-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="font-bold text-xs sm:text-sm tracking-tight bg-gradient-to-r from-cyan-200 via-indigo-200 to-purple-300 bg-clip-text text-transparent">
+                            AIRSYNTH <span class="font-mono-tech text-[10px] sm:text-xs text-purple-300 font-bold">PRO</span>
+                        </h1>
+                        <span id="status-badge" class="text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 whitespace-nowrap">
+                            لمسی / موس
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-400 hidden md:block">استودیو امبینت، شیمر و ریورب فضایی با حرکت دست</p>
+                </div>
+            </div>
+
+            <!-- Live Telemetry Pills (Desktop Center) -->
+            <div class="studio-glass rounded-2xl px-3 py-1.5 hidden lg:flex items-center gap-4">
+                <!-- Right Hand Melody Pill -->
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]"></span>
+                    <div class="text-[11px] text-slate-400">دست راست (ملودی):</div>
+                    <div id="hud-note-desktop" class="font-mono-tech text-xs font-bold text-cyan-200 bg-cyan-500/10 border border-cyan-400/25 px-2 py-0.5 rounded-lg min-w-[82px] text-center">
+                        READY
+                    </div>
+                </div>
+
+                <div class="h-5 w-[1px] bg-white/10"></div>
+
+                <!-- Left Hand Pad Pill -->
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_8px_#c084fc]"></span>
+                    <div class="text-[11px] text-slate-400">دست چپ (آکورد):</div>
+                    <div id="hud-chord-desktop" class="font-mono-tech text-xs font-bold text-purple-200 bg-purple-500/10 border border-purple-400/25 px-2 py-0.5 rounded-lg min-w-[76px] text-center">
+                        SILENT
+                    </div>
+                </div>
+
+                <div class="h-5 w-[1px] bg-white/10"></div>
+
+                <!-- Live Audio Waveform Scope -->
+                <canvas id="scope-canvas" width="96" height="26" class="rounded-lg bg-slate-950/80 border border-indigo-300/15"></canvas>
+            </div>
+
+            <!-- Action Buttons (Camera, Flip Cam, Zen Mode, Guide) -->
+            <div class="flex items-center gap-1.5 sm:gap-2">
+                <button id="btn-camera" class="camera-cta-glow rounded-xl px-3 py-2 sm:px-3.5 sm:py-2 bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-500 hover:opacity-95 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition active:scale-95 shadow-lg">
+                    <i id="camera-icon" class="ph-bold ph-video-camera text-sm sm:text-base"></i>
+                    <span id="camera-btn-text">روشن کردن دوربین</span>
+                </button>
+
+                <button id="btn-flip-cam" class="hidden studio-glass hover:bg-white/10 rounded-xl p-2 text-cyan-200 transition active:scale-95" title="چرخش دوربین جلو/پشت">
+                    <i class="ph-bold ph-camera-rotate text-base sm:text-lg"></i>
+                </button>
+
+                <button id="btn-zen" class="studio-glass hover:bg-white/10 rounded-xl p-2 text-purple-200 transition active:scale-95" title="حالت ریلز اینستاگرام (خلوت کردن صفحه)">
+                    <i class="ph-bold ph-frame-corners text-base sm:text-lg"></i>
+                </button>
+
+                <button id="btn-help" class="studio-glass hover:bg-white/10 rounded-xl p-2 text-slate-200 transition active:scale-95" title="راهنمای استفاده">
+                    <i class="ph-bold ph-question text-base sm:text-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Compact Telemetry & Chord Pad Bar (Easy Thumb Access on Smartphones) -->
+        <div id="ui-chord-bar" class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-1.5">
+            <!-- Mobile Live Note & Chord Readout Strip -->
+            <div class="flex lg:hidden items-center justify-between studio-pill rounded-xl px-3 py-1 text-[11px]">
+                <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                    <span class="text-slate-400">ملودی:</span>
+                    <span id="hud-note-mobile" class="font-mono-tech font-bold text-cyan-200">READY</span>
+                </div>
+                <div class="h-3.5 w-[1px] bg-white/10"></div>
+                <div class="flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                    <span class="text-slate-400">پد آکورد:</span>
+                    <span id="hud-chord-mobile" class="font-mono-tech font-bold text-purple-200">SILENT</span>
+                </div>
+            </div>
+
+            <!-- Interactive 5-Chord Pad Trigger Strip (Works via Left-Hand 1-5 Fingers OR Touch Tap) -->
+            <div class="studio-glass rounded-2xl p-1.5 flex items-center justify-between sm:justify-start gap-1.5 overflow-x-auto no-scrollbar">
+                <div class="hidden sm:flex items-center gap-1 px-2 text-[10px] text-purple-200 font-semibold shrink-0">
+                    <i class="ph-fill ph-hand-palm text-purple-300 text-xs"></i>
+                    <span>پد دست چپ:</span>
+                </div>
+
+                <button data-chord-idx="1" class="chord-pad-btn flex-1 sm:flex-initial min-w-[54px] py-1.5 px-2 rounded-xl bg-white/5 hover:bg-purple-500/25 border border-white/10 text-xs font-mono-tech font-bold text-slate-200 transition flex items-center justify-center gap-1 active:scale-95">
+                    <span class="text-[10px] text-purple-300">1</span>
+                    <span id="chord-label-1">Am9</span>
+                </button>
+                <button data-chord-idx="2" class="chord-pad-btn flex-1 sm:flex-initial min-w-[54px] py-1.5 px-2 rounded-xl bg-white/5 hover:bg-purple-500/25 border border-white/10 text-xs font-mono-tech font-bold text-slate-200 transition flex items-center justify-center gap-1 active:scale-95">
+                    <span class="text-[10px] text-purple-300">2</span>
+                    <span id="chord-label-2">Fmaj9</span>
+                </button>
+                <button data-chord-idx="3" class="chord-pad-btn flex-1 sm:flex-initial min-w-[54px] py-1.5 px-2 rounded-xl bg-white/5 hover:bg-purple-500/25 border border-white/10 text-xs font-mono-tech font-bold text-slate-200 transition flex items-center justify-center gap-1 active:scale-95">
+                    <span class="text-[10px] text-purple-300">3</span>
+                    <span id="chord-label-3">Cmaj7</span>
+                </button>
+                <button data-chord-idx="4" class="chord-pad-btn flex-1 sm:flex-initial min-w-[54px] py-1.5 px-2 rounded-xl bg-white/5 hover:bg-purple-500/25 border border-white/10 text-xs font-mono-tech font-bold text-slate-200 transition flex items-center justify-center gap-1 active:scale-95">
+                    <span class="text-[10px] text-purple-300">4</span>
+                    <span id="chord-label-4">Dm9</span>
+                </button>
+                <button data-chord-idx="5" class="chord-pad-btn flex-1 sm:flex-initial min-w-[54px] py-1.5 px-2 rounded-xl bg-white/5 hover:bg-purple-500/25 border border-white/10 text-xs font-mono-tech font-bold text-slate-200 transition flex items-center justify-center gap-1 active:scale-95">
+                    <span class="text-[10px] text-purple-300">5</span>
+                    <span id="chord-label-5">Esus4</span>
+                </button>
+                <button data-chord-idx="0" class="chord-pad-btn py-1.5 px-2.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/30 border border-rose-400/30 text-[10px] font-bold text-rose-200 transition shrink-0 active:scale-95" title="محو کردن پد آکورد">
+                    ✊ محو
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Floating Exit Zen Mode Button (Hidden unless Zen Mode is active) -->
+    <button id="btn-exit-zen" class="hidden fixed top-3 left-3 z-40 studio-glass px-3.5 py-2 rounded-2xl border border-purple-400/40 text-xs font-bold text-purple-200 flex items-center gap-2 shadow-xl active:scale-95">
+        <i class="ph-bold ph-eye text-base"></i>
+        <span>نمایش پنل استودیو</span>
+    </button>
+
+    <!-- ===================================================================
+         BOTTOM COLLAPSIBLE STUDIO MIXER & SYNTH CONSOLE
+         Includes Dedicated Right-Hand & Left-Hand Rotary Volume Knobs!
+    ==================================================================== -->
+    <footer id="studio-dock" class="fixed bottom-2.5 inset-x-2.5 sm:bottom-4 sm:inset-x-5 z-20 transition-all duration-300 max-w-6xl mx-auto">
+        <div class="studio-glass rounded-3xl p-2.5 sm:p-4 border border-indigo-300/20">
+            
+            <!-- Top Console Bar: Mobile Tab Switcher & Minimize Button -->
+            <div class="flex items-center justify-between gap-2 pb-2 mb-2.5 border-b border-white/10">
+                <div class="flex items-center gap-1.5">
+                    <button id="tab-btn-mixer" class="px-3 py-1 rounded-xl text-xs font-bold bg-cyan-400/20 text-cyan-200 border border-cyan-400/40 flex items-center gap-1.5 transition">
+                        <i class="ph-fill ph-faders text-sm"></i>
+                        <span>ناب‌های ولوم و افکت</span>
+                    </button>
+                    <button id="tab-btn-synth" class="px-3 py-1 rounded-xl text-xs font-semibold bg-white/5 text-slate-300 border border-transparent hover:bg-white/10 flex items-center gap-1.5 transition lg:hidden">
+                        <i class="ph-fill ph-sliders-horizontal text-sm"></i>
+                        <span>تنظیمات صدا و گام</span>
+                    </button>
+                    <span class="hidden lg:inline-block text-[11px] text-slate-400 mr-2">
+                        <i class="ph-fill ph-info text-cyan-300 ml-1"></i>برای تغییر ولوم هر ناب، آن را به بالا یا پایین بکشید (دوبار لمس = حالت پیش‌فرض)
+                    </span>
+                </div>
+
+                <button id="btn-minimize-dock" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] flex items-center gap-1 transition">
+                    <span id="minimize-text">جمع کردن پنل</span>
+                    <i id="minimize-icon" class="ph-bold ph-caret-down text-xs"></i>
+                </button>
+            </div>
+
+            <!-- Collapsible Body Content -->
+            <div id="dock-body" class="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-center">
+                
+                <!-- SECTION 1: 4 TACTILE ROTARY KNOBS (Right Hand Vol, Left Hand Vol, Reverb, Shimmer) -->
+                <div id="panel-mixer" class="lg:col-span-6 grid grid-cols-4 gap-2 sm:gap-3 items-center justify-items-center bg-slate-950/45 rounded-2xl p-2.5 border border-white/5">
+                    
+                    <!-- KNOB 1: RIGHT HAND VOLUME (MELODY) -->
+                    <div class="flex flex-col items-center gap-1 w-full">
+                        <div class="rotary-knob-wrapper relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center"
+                             data-knob="rightVol" data-min="0" data-max="100" data-val="85" data-default="85" data-color="#38bdf8">
+                            <svg class="rotary-knob-ring w-full h-full -rotate-90" viewBox="0 0 64 64">
+                                <circle cx="32" cy="32" r="26" fill="rgba(15,23,42,0.9)" stroke="rgba(56,189,248,0.16)" stroke-width="4.5"></circle>
+                                <circle class="knob-arc" cx="32" cy="32" r="26" fill="none" stroke="#38bdf8" stroke-width="4.5"
+                                        stroke-linecap="round" stroke-dasharray="163.36" stroke-dashoffset="24.5"
+                                        style="filter: drop-shadow(0 0 6px rgba(56,189,248,0.8));"></circle>
+                            </svg>
+                            <!-- Center Cap & Value -->
+                            <div class="absolute inset-2.5 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 border border-cyan-400/30 flex flex-col items-center justify-center shadow-inner">
+                                <span id="knob-val-rightVol" class="font-mono-tech text-[11px] sm:text-xs font-bold text-cyan-200">85%</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-[10px] sm:text-[11px] font-bold text-cyan-200 whitespace-nowrap">ولوم دست راست</span>
+                            <button id="btn-mute-right" class="w-5 h-5 rounded-md bg-cyan-500/15 hover:bg-cyan-500/30 border border-cyan-400/30 flex items-center justify-center text-cyan-200 transition" title="قطع/وصل صدای دست راست">
+                                <i class="ph-fill ph-speaker-high text-xs"></i>
+                            </button>
+                        </div>
+                        <span class="text-[9px] text-slate-400 -mt-1">ملودی (Lead)</span>
+                    </div>
+
+                    <!-- KNOB 2: LEFT HAND VOLUME (CHORD PAD) -->
+                    <div class="flex flex-col items-center gap-1 w-full">
+                        <div class="rotary-knob-wrapper relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center"
+                             data-knob="leftVol" data-min="0" data-max="100" data-val="70" data-default="70" data-color="#c084fc">
+                            <svg class="rotary-knob-ring w-full h-full -rotate-90" viewBox="0 0 64 64">
+                                <circle cx="32" cy="32" r="26" fill="rgba(15,23,42,0.9)" stroke="rgba(192,132,252,0.16)" stroke-width="4.5"></circle>
+                                <circle class="knob-arc" cx="32" cy="32" r="26" fill="none" stroke="#c084fc" stroke-width="4.5"
+                                        stroke-linecap="round" stroke-dasharray="163.36" stroke-dashoffset="49.0"
+                                        style="filter: drop-shadow(0 0 6px rgba(192,132,252,0.8));"></circle>
+                            </svg>
+                            <div class="absolute inset-2.5 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 border border-purple-400/30 flex flex-col items-center justify-center shadow-inner">
+                                <span id="knob-val-leftVol" class="font-mono-tech text-[11px] sm:text-xs font-bold text-purple-200">70%</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <span class="text-[10px] sm:text-[11px] font-bold text-purple-200 whitespace-nowrap">ولوم دست چپ</span>
+                            <button id="btn-mute-left" class="w-5 h-5 rounded-md bg-purple-500/15 hover:bg-purple-500/30 border border-purple-400/30 flex items-center justify-center text-purple-200 transition" title="قطع/وصل صدای پد دست چپ">
+                                <i class="ph-fill ph-speaker-high text-xs"></i>
+                            </button>
+                        </div>
+                        <span class="text-[9px] text-slate-400 -mt-1">پد آکورد (Pad)</span>
+                    </div>
+
+                    <!-- KNOB 3: CATHEDRAL REVERB MIX -->
+                    <div class="flex flex-col items-center gap-1 w-full">
+                        <div class="rotary-knob-wrapper relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center"
+                             data-knob="reverb" data-min="0" data-max="100" data-val="85" data-default="85" data-color="#818cf8">
+                            <svg class="rotary-knob-ring w-full h-full -rotate-90" viewBox="0 0 64 64">
+                                <circle cx="32" cy="32" r="26" fill="rgba(15,23,42,0.9)" stroke="rgba(129,140,248,0.16)" stroke-width="4.5"></circle>
+                                <circle class="knob-arc" cx="32" cy="32" r="26" fill="none" stroke="#818cf8" stroke-width="4.5"
+                                        stroke-linecap="round" stroke-dasharray="163.36" stroke-dashoffset="24.5"
+                                        style="filter: drop-shadow(0 0 6px rgba(129,140,248,0.8));"></circle>
+                            </svg>
+                            <div class="absolute inset-2.5 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 border border-indigo-400/30 flex flex-col items-center justify-center shadow-inner">
+                                <span id="knob-val-reverb" class="font-mono-tech text-[11px] sm:text-xs font-bold text-indigo-200">85%</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] sm:text-[11px] font-semibold text-indigo-200 whitespace-nowrap">عمق ریورب</span>
+                        <span class="text-[9px] text-slate-400 -mt-1">Cathedral 5.5s</span>
+                    </div>
+
+                    <!-- KNOB 4: SHIMMER & TAPE DELAY -->
+                    <div class="flex flex-col items-center gap-1 w-full">
+                        <div class="rotary-knob-wrapper relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center"
+                             data-knob="shimmer" data-min="0" data-max="100" data-val="70" data-default="70" data-color="#f472b6">
+                            <svg class="rotary-knob-ring w-full h-full -rotate-90" viewBox="0 0 64 64">
+                                <circle cx="32" cy="32" r="26" fill="rgba(15,23,42,0.9)" stroke="rgba(244,114,182,0.16)" stroke-width="4.5"></circle>
+                                <circle class="knob-arc" cx="32" cy="32" r="26" fill="none" stroke="#f472b6" stroke-width="4.5"
+                                        stroke-linecap="round" stroke-dasharray="163.36" stroke-dashoffset="49.0"
+                                        style="filter: drop-shadow(0 0 6px rgba(244,114,182,0.8));"></circle>
+                            </svg>
+                            <div class="absolute inset-2.5 rounded-full bg-gradient-to-b from-slate-800 to-slate-950 border border-pink-400/30 flex flex-col items-center justify-center shadow-inner">
+                                <span id="knob-val-shimmer" class="font-mono-tech text-[11px] sm:text-xs font-bold text-pink-200">70%</span>
+                            </div>
+                        </div>
+                        <span class="text-[10px] sm:text-[11px] font-semibold text-pink-200 whitespace-nowrap">شیمر و دیلی</span>
+                        <span class="text-[9px] text-slate-400 -mt-1">Octave Glow</span>
+                    </div>
+
+                </div>
+
+                <!-- SECTION 2: SOUND PRESET, SCALE, GESTURE MODE & SWELL TAIL -->
+                <div id="panel-synth" class="hidden lg:grid lg:col-span-6 grid-cols-2 sm:grid-cols-2 gap-2.5 sm:gap-3 items-center">
+                    
+                    <!-- 1. Ambient Preset -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[11px] text-slate-300 flex items-center gap-1">
+                            <i class="ph-fill ph-sparkle text-purple-300"></i>
+                            <span>بافت صدای سینت (Preset)</span>
+                        </label>
+                        <select id="select-preset" class="bg-slate-900/95 border border-indigo-300/25 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-300">
+                            <option value="nebula_shimmer" selected>شیمر کهکشانی (Nebula Shimmer)</option>
+                            <option value="cs80_dream">بلید رانر (Vangelis CS-80)</option>
+                            <option value="crystal_glass">هارپ بلورین (Crystal Glass)</option>
+                            <option value="cosmos_drone">درون عمیق کیهانی (Deep Cosmos)</option>
+                        </select>
+                    </div>
+
+                    <!-- 2. Root Note & Musical Scale -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[11px] text-slate-300 flex items-center gap-1">
+                            <i class="ph-fill ph-music-notes-plus text-cyan-300"></i>
+                            <span>گام و کوک (Scale & Key)</span>
+                        </label>
+                        <div class="flex gap-1">
+                            <select id="select-root" class="w-14 bg-slate-900/95 border border-indigo-300/25 rounded-xl px-1.5 py-2 text-xs font-mono-tech text-cyan-200 font-bold focus:outline-none focus:border-cyan-300">
+                                <option value="A" selected>A</option>
+                                <option value="C">C</option>
+                                <option value="D">D</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="G">G</option>
+                            </select>
+                            <select id="select-scale" class="flex-1 bg-slate-900/95 border border-indigo-300/25 rounded-xl px-2 py-2 text-xs text-white focus:outline-none focus:border-cyan-300">
+                                <option value="lydian_dream" selected>رویایی لیدین (Lydian)</option>
+                                <option value="minor9_ambient">امبینت مینور ۹ (Lush Minor)</option>
+                                <option value="dorian_space">فضایی دوریان (Interstellar)</option>
+                                <option value="pentatonic_lush">پنتاتونیک آرام (Floating)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 3. Right Hand Gesture Trigger Mode -->
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[11px] text-slate-300 flex items-center gap-1">
+                            <i class="ph-fill ph-hand-tap text-indigo-300"></i>
+                            <span>حالت نواختن دست راست</span>
+                        </label>
+                        <select id="select-play-mode" class="bg-slate-900/95 border border-indigo-300/25 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-300">
+                            <option value="pinch_swell" selected>نیشگون (Pinch) = موج نت جدید</option>
+                            <option value="air_float">شناور در هوا (بدون نیاز به Pinch)</option>
+                        </select>
+                    </div>
+
+                    <!-- 4. Note Release Tail Slider -->
+                    <div class="flex flex-col gap-1.5 bg-slate-900/60 px-3 py-2 rounded-xl border border-white/5">
+                        <div class="flex justify-between text-[11px]">
+                            <span class="text-slate-300">کشش و محو شدن نت (Swell Tail)</span>
+                            <span id="val-swell" class="font-mono-tech text-cyan-300 font-bold">3.2s</span>
+                        </div>
+                        <input id="slider-swell" type="range" min="12" max="55" value="32">
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+    </footer>
+
+    <!-- ===================================================================
+         WELCOME & QUICK GUIDE MODAL
+    ==================================================================== -->
+    <div id="help-modal" class="fixed inset-0 z-50 flex items-center justify-center p-3.5 bg-black/80 backdrop-blur-md transition-opacity duration-300">
+        <div class="studio-glass rounded-3xl max-w-lg w-full p-5 sm:p-6 border border-indigo-400/30 shadow-2xl relative max-h-[92dvh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400/25 to-purple-500/25 border border-cyan-300/40 flex items-center justify-center text-cyan-200">
+                        <i class="ph-fill ph-planet text-xl"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-sm sm:text-base text-white">استودیو فضایی AirSynth Ambient Pro</h2>
+                        <p class="text-[11px] text-slate-400">بهینه‌شده برای موبایل و دسکتاپ + ناب‌های ولوم مجزا</p>
+                    </div>
+                </div>
+                <button id="btn-close-help" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 flex items-center justify-center text-slate-300">
+                    <i class="ph-bold ph-x"></i>
+                </button>
+            </div>
+
+            <div class="space-y-2.5 text-xs text-slate-200 leading-relaxed">
+                <div class="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-400/25 flex items-start gap-3">
+                    <span class="text-xl">🤏</span>
+                    <div>
+                        <h3 class="font-bold text-cyan-200 mb-0.5">دست راست: ملودی امبینت و فیلتر (با ناب ولوم مجزا)</h3>
+                        <p class="text-[11px] text-slate-300">
+                            انگشت <strong>شست و اشاره دست راست</strong> را به هم نزدیک کنید (یا انگشت خود را روی صفحه گوشی بکشید). حرکت به بالا و پایین نت را تغییر می‌دهد و حرکت به چپ و راست، درخشش فیلتر و شیمر را کنترل می‌کند.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-2xl bg-purple-500/10 border border-purple-400/25 flex items-start gap-3">
+                    <span class="text-xl">🖐️</span>
+                    <div>
+                        <h3 class="font-bold text-purple-200 mb-0.5">دست چپ: پدهای آکورد ۵ صدایی (با ناب ولوم مجزا)</h3>
+                        <p class="text-[11px] text-slate-300">
+                            با باز کردن <strong>۱ تا ۵ انگشت دست چپ</strong> مقابل دوربین (یا لمس دکمه‌های آکورد <code class="text-purple-200 font-mono-tech">1</code> تا <code class="text-purple-200 font-mono-tech">5</code> در بالای صفحه)، پد آکورد فضایی در پس‌زمینه به صدا در می‌آید.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-400/25 flex items-start gap-3">
+                    <span class="text-xl">🎛️</span>
+                    <div>
+                        <h3 class="font-bold text-indigo-200 mb-0.5">ناب‌های چرخشی ولوم (Rotary Knobs)</h3>
+                        <p class="text-[11px] text-slate-300">
+                            در پنل پایین می‌توانید <strong>ولوم دست راست (ملودی)</strong> و <strong>ولوم دست چپ (پد آکورد)</strong> را به صورت مستقل با کشیدن ناب به بالا/پایین تنظیم یا Mute کنید.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-5 flex flex-col sm:flex-row gap-2.5">
+                <button id="btn-start-with-cam" class="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-400 via-indigo-400 to-purple-500 hover:opacity-95 text-slate-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95">
+                    <i class="ph-bold ph-video-camera text-lg"></i>
+                    <span>شروع با دوربین (موبایل / وب‌کم)</span>
+                </button>
+                <button id="btn-start-touch" class="py-3 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 border border-white/15 transition active:scale-95">
+                    <i class="ph-bold ph-hand-tap text-lg text-cyan-300"></i>
+                    <span>نواختن لمسی روی صفحه</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Toast Notification -->
+    <div id="toast-box" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none opacity-0 transition-all duration-300 transform -translate-y-2 w-max max-w-[90vw]">
+        <div class="studio-glass px-4 py-2 rounded-2xl border border-cyan-300/40 text-xs text-white flex items-center gap-2 shadow-xl">
+            <i class="ph-fill ph-sparkle text-cyan-300 text-base shrink-0"></i>
+            <span id="toast-text" class="truncate">پیام سیستم</span>
+        </div>
+    </div>
+
+    <script>
+        /********************************************************************
+         * 1. MUSICAL SCALES & AMBIENT CHORD VOICINGS
+         ********************************************************************/
+        const NOTE_INDEX = { 'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5, 'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11 };
+        const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+        const AMBIENT_SCALES = {
+            lydian_dream: {
+                name: 'Lydian Dream',
+                intervals: [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19],
+                chords: [
+                    { suffix: 'maj9', intervals: [0, 7, 11, 14, 16] },
+                    { suffix: '6/9', intervals: [2, 9, 14, 18, 21] },
+                    { suffix: 'm11', intervals: [4, 11, 14, 16, 21] },
+                    { suffix: 'maj7#11', intervals: [6, 11, 14, 18, 23] },
+                    { suffix: 'maj9/V', intervals: [7, 14, 16, 19, 23] }
+                ]
+            },
+            minor9_ambient: {
+                name: 'Minor 9th Lush',
+                intervals: [0, 2, 3, 5, 7, 10, 12, 14, 15, 17, 19, 22],
+                chords: [
+                    { suffix: 'm9', intervals: [0, 7, 10, 14, 15] },
+                    { suffix: 'maj9', intervals: [-4, 3, 7, 10, 14] },
+                    { suffix: 'maj7sus2', intervals: [3, 10, 14, 17, 22] },
+                    { suffix: 'm11', intervals: [5, 12, 15, 19, 22] },
+                    { suffix: '7sus4', intervals: [7, 14, 17, 19, 24] }
+                ]
+            },
+            dorian_space: {
+                name: 'Dorian Space',
+                intervals: [0, 2, 3, 5, 7, 9, 10, 12, 14, 15, 17, 21],
+                chords: [
+                    { suffix: 'm9', intervals: [0, 7, 10, 14, 15] },
+                    { suffix: 'm11', intervals: [2, 9, 12, 16, 21] },
+                    { suffix: 'maj9', intervals: [3, 10, 14, 17, 22] },
+                    { suffix: '9sus4', intervals: [5, 12, 16, 19, 21] },
+                    { suffix: 'm7add11', intervals: [7, 14, 17, 21, 22] }
+                ]
+            },
+            pentatonic_lush: {
+                name: 'Floating Pentatonic',
+                intervals: [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24],
+                chords: [
+                    { suffix: 'm7add11', intervals: [0, 7, 10, 15, 17] },
+                    { suffix: '6/9', intervals: [3, 10, 14, 19, 22] },
+                    { suffix: 'm9', intervals: [5, 12, 15, 19, 24] },
+                    { suffix: 'sus2', intervals: [7, 14, 19, 21, 26] },
+                    { suffix: 'maj9', intervals: [-4, 3, 7, 10, 14] }
+                ]
+            }
+        };
+
+        const AMBIENT_PRESETS = {
+            nebula_shimmer: {
+                attack: 0.22,
+                sawLevel: 0.28,
+                triLevel: 0.65,
+                subLevel: 0.44,
+                shimmerBoost: 1.0,
+                filterBase: 360,
+                filterSpan: 2800,
+                detuneSpread: 14
+            },
+            cs80_dream: {
+                attack: 0.14,
+                sawLevel: 0.54,
+                triLevel: 0.45,
+                subLevel: 0.50,
+                shimmerBoost: 0.60,
+                filterBase: 420,
+                filterSpan: 3500,
+                detuneSpread: 18
+            },
+            crystal_glass: {
+                attack: 0.26,
+                sawLevel: 0.10,
+                triLevel: 0.82,
+                subLevel: 0.32,
+                shimmerBoost: 1.30,
+                filterBase: 550,
+                filterSpan: 3300,
+                detuneSpread: 9
+            },
+            cosmos_drone: {
+                attack: 0.36,
+                sawLevel: 0.34,
+                triLevel: 0.55,
+                subLevel: 0.75,
+                shimmerBoost: 0.75,
+                filterBase: 190,
+                filterSpan: 1500,
+                detuneSpread: 20
+            }
+        };
+
+        function midiToFreq(midi) {
+            return 440 * Math.pow(2, (midi - 69) / 12);
+        }
+
+        function midiToNoteName(midi) {
+            const normalized = ((midi % 12) + 12) % 12;
+            const name = NOTE_NAMES[normalized];
+            const octave = Math.floor(midi / 12) - 1;
+            return `${name}${octave}`;
+        }
+
+        /********************************************************************
+         * 2. APPLICATION STATE (Including Dedicated Hand Volumes & Mutes)
+         ********************************************************************/
+        const state = {
+            rootNote: 'A',
+            scaleKey: 'lydian_dream',
+            presetKey: 'nebula_shimmer',
+            playMode: 'pinch_swell',
+
+            // Independent Hand Volumes & Mutes (Controlled by Rotary Knobs)
+            rightHandVol: 0.85,
+            leftHandVol: 0.70,
+            rightMuted: false,
+            leftMuted: false,
+
+            reverbMix: 0.85,
+            shimmerMix: 0.70,
+            releaseTail: 3.2,
+
+            // Camera & Mobile Orientation State
+            cameraActive: false,
+            facingMode: 'user', // 'user' (front mirrored) or 'environment' (back)
+            camOpacity: 0.46,
+            videoTransform: { scale: 1, offsetX: 0, offsetY: 0, scaledW: 640, scaledH: 480 },
+
+            scaleNotes: [],
+            chordList: [],
+
+            activeChordIndex: 0,
+            leadActive: false,
+            leadFreq: 440,
+            leadNoteLabel: 'READY',
+            leadLaneIndex: -1,
+            lastTriggeredLane: -1,
+            filterNorm: 0.65,
+
+            pointerDown: false,
+            pointerX: 0.65,
+            pointerY: 0.5,
+
+            detectedHands: [],
+            particles: [],
+            ripples: [],
+            stars: []
+        };
+
+        for (let i = 0; i < 60; i++) {
+            state.stars.push({
+                x: Math.random(),
+                y: Math.random(),
+                size: 0.6 + Math.random() * 1.8,
+                phase: Math.random() * Math.PI * 2,
+                speed: 0.0002 + Math.random() * 0.0004
+            });
+        }
+
+        function updateHUDReadouts(noteText, chordText) {
+            if (noteText !== null) {
+                const nd = document.getElementById('hud-note-desktop');
+                const nm = document.getElementById('hud-note-mobile');
+                if (nd) nd.textContent = noteText;
+                if (nm) nm.textContent = noteText;
+            }
+            if (chordText !== null) {
+                const cd = document.getElementById('hud-chord-desktop');
+                const cm = document.getElementById('hud-chord-mobile');
+                if (cd) cd.textContent = chordText;
+                if (cm) cm.textContent = chordText;
+            }
+        }
+
+        function rebuildMusicalScale() {
+            const rootOffset = NOTE_INDEX[state.rootNote];
+            const scaleDef = AMBIENT_SCALES[state.scaleKey];
+            const baseMidiLead = 48 + rootOffset;
+            const baseMidiChord = 36 + rootOffset;
+
+            state.scaleNotes = scaleDef.intervals.map(semi => {
+                const midi = baseMidiLead + semi;
+                return {
+                    midi,
+                    freq: midiToFreq(midi),
+                    label: midiToNoteName(midi)
+                };
+            });
+
+            state.chordList = scaleDef.chords.map((ch) => {
+                const chordRootMidi = baseMidiChord + ch.intervals[0];
+                const normalized = ((chordRootMidi % 12) + 12) % 12;
+                const rootName = NOTE_NAMES[normalized];
+                return {
+                    name: `${rootName}${ch.suffix}`,
+                    freqs: ch.intervals.map(semi => midiToFreq(baseMidiChord + semi))
+                };
+            });
+
+            for (let i = 1; i <= 5; i++) {
+                const lbl = document.getElementById(`chord-label-${i}`);
+                if (lbl && state.chordList[i - 1]) {
+                    lbl.textContent = state.chordList[i - 1].name;
+                }
+            }
+
+            if (state.activeChordIndex > 0 && ambientEngine.isInitialized) {
+                ambientEngine.setPadChord(state.activeChordIndex, true);
+            }
+        }
+
+        /********************************************************************
+         * 3. WEB AUDIO API ENGINE WITH DEDICATED LEFT & RIGHT HAND BUSES
+         ********************************************************************/
+        class LushAmbientAudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.isInitialized = false;
+
+                // Dedicated Hand Buses controlled by the Rotary Knobs
+                this.rightHandGain = null;
+                this.leftHandGain = null;
+
+                this.dryBus = null;
+                this.reverbSend = null;
+                this.delaySend = null;
+                this.reverbWetGain = null;
+                this.delayWetGain = null;
+                this.analyser = null;
+
+                this.currentLeadVoice = null;
+                this.activePadVoices = [];
+                this.padFilter = null;
+            }
+
+            init() {
+                if (this.isInitialized) {
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                    return;
+                }
+
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioCtx();
+
+                // Unlock iOS Safari AudioContext with a tiny silent buffer
+                try {
+                    const silentBuf = this.ctx.createBuffer(1, 1, 22050);
+                    const src = this.ctx.createBufferSource();
+                    src.buffer = silentBuf;
+                    src.connect(this.ctx.destination);
+                    src.start(0);
+                    if (this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                } catch (e) {}
+
+                // Master Limiter & Warm EQ
+                const masterCompressor = this.ctx.createDynamicsCompressor();
+                masterCompressor.threshold.value = -14;
+                masterCompressor.knee.value = 24;
+                masterCompressor.ratio.value = 4;
+                masterCompressor.attack.value = 0.015;
+                masterCompressor.release.value = 0.35;
+
+                const warmBassEQ = this.ctx.createBiquadFilter();
+                warmBassEQ.type = 'lowshelf';
+                warmBassEQ.frequency.value = 140;
+                warmBassEQ.gain.value = 3.2;
+
+                const silkTopFilter = this.ctx.createBiquadFilter();
+                silkTopFilter.type = 'lowpass';
+                silkTopFilter.frequency.value = 7800;
+                silkTopFilter.Q.value = 0.5;
+
+                this.analyser = this.ctx.createAnalyser();
+                this.analyser.fftSize = 256;
+                this.analyser.smoothingTimeConstant = 0.86;
+
+                warmBassEQ.connect(silkTopFilter);
+                silkTopFilter.connect(masterCompressor);
+                masterCompressor.connect(this.analyser);
+                this.analyser.connect(this.ctx.destination);
+
+                // Dry Bus
+                this.dryBus = this.ctx.createGain();
+                this.dryBus.gain.value = 0.58;
+                this.dryBus.connect(warmBassEQ);
+
+                // 5.5s Velvet Nebula Convolution Reverb
+                this.reverbSend = this.ctx.createGain();
+                this.reverbSend.gain.value = 0.9;
+
+                const convolver = this.ctx.createConvolver();
+                convolver.buffer = this.createVelvetNebulaImpulse(5.5);
+
+                const reverbDamping = this.ctx.createBiquadFilter();
+                reverbDamping.type = 'lowpass';
+                reverbDamping.frequency.value = 2650;
+                reverbDamping.Q.value = 0.5;
+
+                this.reverbWetGain = this.ctx.createGain();
+                this.reverbWetGain.gain.value = state.reverbMix * 1.15;
+
+                this.reverbSend.connect(convolver);
+                convolver.connect(reverbDamping);
+                reverbDamping.connect(this.reverbWetGain);
+                this.reverbWetGain.connect(warmBassEQ);
+
+                // Ping-Pong Stereo Tape Delay
+                this.delaySend = this.ctx.createGain();
+                this.delaySend.gain.value = 0.75;
+
+                const delayL = this.ctx.createDelay(2.0);
+                const delayR = this.ctx.createDelay(2.0);
+                delayL.delayTime.value = 0.38;
+                delayR.delayTime.value = 0.52;
+
+                const tapeLfo = this.ctx.createOscillator();
+                const tapeLfoDepthL = this.ctx.createGain();
+                const tapeLfoDepthR = this.ctx.createGain();
+                tapeLfo.type = 'sine';
+                tapeLfo.frequency.value = 0.35;
+                tapeLfoDepthL.gain.value = 0.0022;
+                tapeLfoDepthR.gain.value = -0.0022;
+                tapeLfo.connect(tapeLfoDepthL);
+                tapeLfo.connect(tapeLfoDepthR);
+                tapeLfoDepthL.connect(delayL.delayTime);
+                tapeLfoDepthR.connect(delayR.delayTime);
+                tapeLfo.start();
+
+                const tapeHPF = this.ctx.createBiquadFilter();
+                tapeHPF.type = 'highpass';
+                tapeHPF.frequency.value = 180;
+
+                const tapeLPF = this.ctx.createBiquadFilter();
+                tapeLPF.type = 'lowpass';
+                tapeLPF.frequency.value = 1900;
+
+                const fbL = this.ctx.createGain();
+                const fbR = this.ctx.createGain();
+                fbL.gain.value = 0.50;
+                fbR.gain.value = 0.50;
+
+                const panL = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : this.ctx.createGain();
+                const panR = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : this.ctx.createGain();
+                if (panL.pan) panL.pan.value = -0.65;
+                if (panR.pan) panR.pan.value = 0.65;
+
+                this.delayWetGain = this.ctx.createGain();
+                this.delayWetGain.gain.value = state.shimmerMix * 0.65;
+
+                this.delaySend.connect(tapeHPF);
+                tapeHPF.connect(tapeLPF);
+                tapeLPF.connect(delayL);
+                tapeLPF.connect(delayR);
+
+                delayL.connect(fbL);
+                fbL.connect(delayR);
+                delayR.connect(fbR);
+                fbR.connect(tapeLPF);
+
+                delayL.connect(panL);
+                delayR.connect(panR);
+                panL.connect(this.delayWetGain);
+                panR.connect(this.delayWetGain);
+
+                this.delayWetGain.connect(warmBassEQ);
+                this.delayWetGain.connect(this.reverbSend);
+
+                // Dedicated RIGHT HAND Master Gain Node (Controlled by Right Hand Rotary Knob)
+                this.rightHandGain = this.ctx.createGain();
+                this.rightHandGain.gain.value = state.rightMuted ? 0.0001 : state.rightHandVol;
+                this.rightHandGain.connect(this.dryBus);
+                this.rightHandGain.connect(this.reverbSend);
+                this.rightHandGain.connect(this.delaySend);
+
+                // Dedicated LEFT HAND Master Gain Node (Controlled by Left Hand Rotary Knob)
+                this.leftHandGain = this.ctx.createGain();
+                this.leftHandGain.gain.value = state.leftMuted ? 0.0001 : state.leftHandVol;
+                this.leftHandGain.connect(this.dryBus);
+                this.leftHandGain.connect(this.reverbSend);
+                this.leftHandGain.connect(this.delaySend);
+
+                // Left-Hand Pad Breathing Filter routed into leftHandGain
+                this.padFilter = this.ctx.createBiquadFilter();
+                this.padFilter.type = 'lowpass';
+                this.padFilter.frequency.value = 950;
+                this.padFilter.Q.value = 0.8;
+
+                const padBreathingLfo = this.ctx.createOscillator();
+                const padBreathingDepth = this.ctx.createGain();
+                padBreathingLfo.type = 'sine';
+                padBreathingLfo.frequency.value = 0.16;
+                padBreathingDepth.gain.value = 380;
+                padBreathingLfo.connect(padBreathingDepth);
+                padBreathingDepth.connect(this.padFilter.frequency);
+                padBreathingLfo.start();
+
+                this.padFilter.connect(this.leftHandGain);
+
+                this.isInitialized = true;
+            }
+
+            createVelvetNebulaImpulse(durationSeconds) {
+                const rate = this.ctx.sampleRate;
+                const length = Math.floor(rate * durationSeconds);
+                const impulse = this.ctx.createBuffer(2, length, rate);
+                const preDelaySamples = Math.floor(rate * 0.030);
+
+                for (let ch = 0; ch < 2; ch++) {
+                    const data = impulse.getChannelData(ch);
+                    let lpState1 = 0;
+                    let lpState2 = 0;
+
+                    for (let i = 0; i < length; i++) {
+                        if (i < preDelaySamples) {
+                            data[i] = 0;
+                            continue;
+                        }
+                        const t = (i - preDelaySamples) / (length - preDelaySamples);
+                        const timeSec = (i - preDelaySamples) / rate;
+
+                        const bloom = 1.0 - Math.exp(-timeSec / 0.085);
+                        const decay = Math.pow(1.0 - t, 2.3);
+
+                        const raw = (Math.random() * 2 - 1);
+                        const alpha = 0.04 + 0.24 * Math.pow(1.0 - t, 1.6);
+                        lpState1 += alpha * (raw - lpState1);
+                        lpState2 += alpha * (lpState1 - lpState2);
+
+                        const mod = 1 + 0.08 * Math.sin(timeSec * (ch === 0 ? 1.7 : 2.1));
+                        data[i] = lpState2 * bloom * decay * mod * 2.2;
+                    }
+                }
+                return impulse;
+            }
+
+            spawnAmbientLeadVoice(freq, filterNorm) {
+                this.init();
+                const now = this.ctx.currentTime;
+                const preset = AMBIENT_PRESETS[state.presetKey] || AMBIENT_PRESETS.nebula_shimmer;
+
+                if (this.currentLeadVoice) {
+                    this.releaseLeadVoice(this.currentLeadVoice);
+                    this.currentLeadVoice = null;
+                }
+
+                const voiceFilter = this.ctx.createBiquadFilter();
+                voiceFilter.type = 'lowpass';
+                const targetCutoff = preset.filterBase + Math.pow(filterNorm, 1.6) * preset.filterSpan;
+                voiceFilter.frequency.setValueAtTime(Math.max(180, targetCutoff * 0.5), now);
+                voiceFilter.frequency.exponentialRampToValueAtTime(Math.max(220, targetCutoff), now + preset.attack * 1.5);
+                voiceFilter.Q.value = 1.4;
+
+                const envGain = this.ctx.createGain();
+                envGain.gain.setValueAtTime(0.0001, now);
+                envGain.gain.linearRampToValueAtTime(0.28, now + preset.attack);
+
+                const shimmerGain = this.ctx.createGain();
+                const shimmerAmount = state.shimmerMix * preset.shimmerBoost * (0.3 + filterNorm * 0.7);
+                shimmerGain.gain.setValueAtTime(0.0001, now);
+                shimmerGain.gain.linearRampToValueAtTime(0.09 * shimmerAmount, now + preset.attack * 2.1);
+
+                const oscCoreTri = this.ctx.createOscillator();
+                const oscSawL = this.ctx.createOscillator();
+                const oscSawR = this.ctx.createOscillator();
+                const oscSubSine = this.ctx.createOscillator();
+                const oscShimmerOct = this.ctx.createOscillator();
+                const oscShimmerFifth = this.ctx.createOscillator();
+
+                oscCoreTri.type = 'triangle';
+                oscSawL.type = 'sawtooth';
+                oscSawR.type = 'sawtooth';
+                oscSubSine.type = 'sine';
+                oscShimmerOct.type = 'sine';
+                oscShimmerFifth.type = 'triangle';
+
+                oscCoreTri.frequency.value = freq;
+                oscSawL.frequency.value = freq;
+                oscSawR.frequency.value = freq;
+                oscSubSine.frequency.value = freq * 0.5;
+                oscShimmerOct.frequency.value = freq * 2.0;
+                oscShimmerFifth.frequency.value = freq * 2.996;
+
+                oscSawL.detune.value = -preset.detuneSpread;
+                oscSawR.detune.value = +preset.detuneSpread;
+                oscShimmerOct.detune.value = 6;
+                oscShimmerFifth.detune.value = -6;
+
+                const gTri = this.ctx.createGain();
+                const gSaw = this.ctx.createGain();
+                const gSub = this.ctx.createGain();
+                gTri.gain.value = preset.triLevel;
+                gSaw.gain.value = preset.sawLevel;
+                gSub.gain.value = preset.subLevel;
+
+                const sawSoftener = this.ctx.createBiquadFilter();
+                sawSoftener.type = 'lowpass';
+                sawSoftener.frequency.value = 1600;
+
+                oscCoreTri.connect(gTri);
+                oscSawL.connect(sawSoftener);
+                oscSawR.connect(sawSoftener);
+                sawSoftener.connect(gSaw);
+                oscSubSine.connect(gSub);
+
+                gTri.connect(voiceFilter);
+                gSaw.connect(voiceFilter);
+                gSub.connect(voiceFilter);
+
+                voiceFilter.connect(envGain);
+
+                const gShimFifth = this.ctx.createGain();
+                gShimFifth.gain.value = 0.35;
+                oscShimmerOct.connect(shimmerGain);
+                oscShimmerFifth.connect(gShimFifth);
+                gShimFifth.connect(shimmerGain);
+
+                // Route Right Hand Voice & Shimmer through rightHandGain!
+                envGain.connect(this.rightHandGain);
+                shimmerGain.connect(this.rightHandGain);
+
+                const allOscs = [oscCoreTri, oscSawL, oscSawR, oscSubSine, oscShimmerOct, oscShimmerFifth];
+                allOscs.forEach(o => o.start(now));
+
+                this.currentLeadVoice = {
+                    allOscs,
+                    voiceFilter,
+                    envGain,
+                    shimmerGain,
+                    freq
+                };
+            }
+
+            updateHeldLeadFilter(filterNorm) {
+                if (!this.currentLeadVoice || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const preset = AMBIENT_PRESETS[state.presetKey] || AMBIENT_PRESETS.nebula_shimmer;
+                const targetCutoff = preset.filterBase + Math.pow(filterNorm, 1.6) * preset.filterSpan;
+                this.currentLeadVoice.voiceFilter.frequency.setTargetAtTime(Math.max(180, targetCutoff), now, 0.06);
+            }
+
+            releaseLeadVoice(voiceObj) {
+                if (!voiceObj || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const tailTime = state.releaseTail;
+                const timeConstant = tailTime / 4.2;
+
+                try {
+                    voiceObj.envGain.gain.cancelScheduledValues(now);
+                    voiceObj.envGain.gain.setValueAtTime(Math.max(0.0001, voiceObj.envGain.gain.value), now);
+                    voiceObj.envGain.gain.setTargetAtTime(0.0001, now, timeConstant);
+
+                    voiceObj.shimmerGain.gain.cancelScheduledValues(now);
+                    voiceObj.shimmerGain.gain.setValueAtTime(Math.max(0.0001, voiceObj.shimmerGain.gain.value), now);
+                    voiceObj.shimmerGain.gain.setTargetAtTime(0.0001, now, timeConstant * 1.15);
+
+                    voiceObj.voiceFilter.frequency.setTargetAtTime(240, now, timeConstant * 0.9);
+
+                    const stopTime = now + tailTime + 0.6;
+                    voiceObj.allOscs.forEach(osc => {
+                        try { osc.stop(stopTime); } catch (e) {}
+                    });
+                } catch (e) {}
+            }
+
+            releaseCurrentLead() {
+                if (this.currentLeadVoice) {
+                    this.releaseLeadVoice(this.currentLeadVoice);
+                    this.currentLeadVoice = null;
+                }
+            }
+
+            setPadChord(chordIndex, forceUpdate = false) {
+                if (chordIndex === state.activeChordIndex && !forceUpdate) return;
+                this.init();
+                const now = this.ctx.currentTime;
+
+                this.activePadVoices.forEach(({ oscs, gain }) => {
+                    try {
+                        gain.gain.cancelScheduledValues(now);
+                        gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), now);
+                        gain.gain.setTargetAtTime(0.0001, now, 0.55);
+                        oscs.forEach(o => o.stop(now + 2.8));
+                    } catch (e) {}
+                });
+                this.activePadVoices = [];
+
+                state.activeChordIndex = chordIndex;
+                updateChordPadHighlight(chordIndex);
+
+                if (chordIndex >= 1 && chordIndex <= 5) {
+                    const chordObj = state.chordList[chordIndex - 1];
+                    if (chordObj) {
+                        updateHUDReadouts(null, `${chordObj.name} [${chordIndex}]`);
+
+                        const voiceGainNode = this.ctx.createGain();
+                        voiceGainNode.gain.setValueAtTime(0.0001, now);
+                        voiceGainNode.gain.linearRampToValueAtTime(0.14, now + 1.1);
+                        voiceGainNode.connect(this.padFilter);
+
+                        const chordOscs = [];
+
+                        chordObj.freqs.forEach((f, idx) => {
+                            if (idx === 0) {
+                                const subOsc = this.ctx.createOscillator();
+                                subOsc.type = 'sine';
+                                subOsc.frequency.value = f;
+                                subOsc.connect(voiceGainNode);
+                                subOsc.start(now);
+                                chordOscs.push(subOsc);
+                            }
+
+                            [-11, 11].forEach((detuneCents, pairIdx) => {
+                                const osc = this.ctx.createOscillator();
+                                osc.type = pairIdx === 0 ? 'triangle' : 'sawtooth';
+                                osc.frequency.value = f;
+                                osc.detune.value = detuneCents;
+                                osc.connect(voiceGainNode);
+                                osc.start(now);
+                                chordOscs.push(osc);
+                            });
+                        });
+
+                        this.activePadVoices.push({ oscs: chordOscs, gain: voiceGainNode });
+                    }
+                } else {
+                    updateHUDReadouts(null, 'SILENT');
+                }
+            }
+
+            updateRightHandVolume() {
+                if (!this.rightHandGain || !this.ctx) return;
+                const target = state.rightMuted ? 0.0001 : state.rightHandVol;
+                this.rightHandGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.04);
+            }
+
+            updateLeftHandVolume() {
+                if (!this.leftHandGain || !this.ctx) return;
+                const target = state.leftMuted ? 0.0001 : state.leftHandVol;
+                this.leftHandGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.04);
+            }
+
+            updateReverbMix(norm) {
+                if (!this.reverbWetGain || !this.ctx) return;
+                this.reverbWetGain.gain.setTargetAtTime(norm * 1.25, this.ctx.currentTime, 0.06);
+            }
+
+            updateShimmerAndDelayMix(norm) {
+                if (!this.delayWetGain || !this.ctx) return;
+                this.delayWetGain.gain.setTargetAtTime(norm * 0.72, this.ctx.currentTime, 0.06);
+            }
+        }
+
+        const ambientEngine = new LushAmbientAudioEngine();
+
+        function triggerOrUpdateAmbientNote(isActive, laneIdx, noteObj, filterNorm, screenX, screenY) {
+            state.filterNorm = Math.max(0.05, Math.min(1.0, filterNorm));
+
+            if (isActive && noteObj) {
+                state.leadActive = true;
+                state.leadLaneIndex = laneIdx;
+                state.leadFreq = noteObj.freq;
+                state.leadNoteLabel = noteObj.label;
+
+                if (laneIdx !== state.lastTriggeredLane || !ambientEngine.currentLeadVoice) {
+                    state.lastTriggeredLane = laneIdx;
+                    ambientEngine.spawnAmbientLeadVoice(noteObj.freq, state.filterNorm);
+                    spawnStardust(screenX, screenY, '#38bdf8', 7);
+                    spawnSonicRipple(screenX, screenY, '#38bdf8');
+                } else {
+                    ambientEngine.updateHeldLeadFilter(state.filterNorm);
+                    if (Math.random() < 0.35) {
+                        spawnStardust(screenX, screenY, '#c084fc', 1);
+                    }
+                }
+
+                updateHUDReadouts(`${noteObj.label} • ${Math.round(noteObj.freq)}Hz`, null);
+            } else {
+                if (state.leadActive) {
+                    ambientEngine.releaseCurrentLead();
+                }
+                state.leadActive = false;
+                state.leadLaneIndex = -1;
+                state.lastTriggeredLane = -1;
+                updateHUDReadouts(noteObj ? `FLOAT (${noteObj.label})` : 'READY', null);
+            }
+        }
+
+        /********************************************************************
+         * 4. EXACT MOBILE & DESKTOP ASPECT-FILL COORDINATE MAPPER
+         * Fixes the issue where mobile portrait cameras stretched or misaligned!
+         ********************************************************************/
+        const canvas = document.getElementById('synth-canvas');
+        const ctx = canvas.getContext('2d');
+        const videoElem = document.getElementById('webcam-video');
+        const scopeCanvas = document.getElementById('scope-canvas');
+        const scopeCtx = scopeCanvas ? scopeCanvas.getContext('2d') : null;
+
+        function updateVideoCoverMetrics() {
+            const cw = canvas.width;
+            const ch = canvas.height;
+            const vw = videoElem.videoWidth || 640;
+            const vh = videoElem.videoHeight || 480;
+
+            const scale = Math.max(cw / vw, ch / vh);
+            const scaledW = vw * scale;
+            const scaledH = vh * scale;
+            const offsetX = (cw - scaledW) / 2;
+            const offsetY = (ch - scaledH) / 2;
+
+            state.videoTransform = { scale, scaledW, scaledH, offsetX, offsetY };
+        }
+
+        // Maps normalized MediaPipe landmark [0..1] to exact on-screen Canvas pixels & normalized Canvas [0..1]
+        function mapVideoToCanvas(normX, normY) {
+            const cw = canvas.width || window.innerWidth;
+            const ch = canvas.height || window.innerHeight;
+            const { scaledW, scaledH, offsetX, offsetY } = state.videoTransform;
+
+            const mirroredX = state.facingMode === 'user' ? (1 - normX) : normX;
+            const px = offsetX + mirroredX * scaledW;
+            const py = offsetY + normY * scaledH;
+
+            return {
+                x: px,
+                y: py,
+                normX: Math.max(0, Math.min(1, px / cw)),
+                normY: Math.max(0, Math.min(1, py / ch))
+            };
+        }
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            updateVideoCoverMetrics();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 150));
+        resizeCanvas();
+
+        /********************************************************************
+         * 5. HAND GESTURE ANALYSIS & PITCH LANE CALCULATION
+         ********************************************************************/
+        function distance2D(p1, p2) {
+            return Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        }
+
+        function countRaisedFingers(landmarks) {
+            const wrist = landmarks[0];
+            let count = 0;
+            const fingerPairs = [[8, 6], [12, 10], [16, 14], [20, 18]];
+
+            for (const [tipIdx, pipIdx] of fingerPairs) {
+                if (distance2D(landmarks[tipIdx], wrist) > distance2D(landmarks[pipIdx], wrist) * 1.12) {
+                    count++;
+                }
+            }
+            if (distance2D(landmarks[4], landmarks[17]) > distance2D(landmarks[3], landmarks[17]) * 1.14) {
+                count++;
+            }
+            return Math.min(5, count);
+        }
+
+        function getNoteFromNormalizedY(normY) {
+            const totalNotes = state.scaleNotes.length;
+            const clampedY = Math.max(0.08, Math.min(0.88, normY));
+            const inverted = 1 - (clampedY - 0.08) / 0.80;
+            const idx = Math.max(0, Math.min(totalNotes - 1, Math.floor(inverted * totalNotes)));
+            return {
+                index: idx,
+                note: state.scaleNotes[idx]
+            };
+        }
+
+        /********************************************************************
+         * 6. VISUALIZER RENDER LOOP (Nebula, Ripples, Particles & Hands)
+         ********************************************************************/
+        function spawnStardust(x, y, color = '#38bdf8', count = 3) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.5 + Math.random() * 2.5;
+                state.particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 0.35,
+                    radius: 1.5 + Math.random() * 4.2,
+                    alpha: 0.95,
+                    color
+                });
+            }
+            if (state.particles.length > 140) {
+                state.particles.splice(0, state.particles.length - 140);
+            }
+        }
+
+        function spawnSonicRipple(x, y, color = '#38bdf8') {
+            state.ripples.push({
+                x,
+                y,
+                radius: 12,
+                maxRadius: 95,
+                alpha: 0.75,
+                color
+            });
+        }
+
+        const HAND_CONNECTIONS_PAIRS = [
+            [0,1],[1,2],[2,3],[3,4],
+            [0,5],[5,6],[6,7],[7,8],
+            [5,9],[9,10],[10,11],[11,12],
+            [9,13],[13,14],[14,15],[15,16],
+            [13,17],[0,17],[17,18],[18,19],[19,20]
+        ];
+
+        function drawEtherealHand(handData, time) {
+            const { mappedLandmarks, role, isPinching, pinchX, pinchY, infoText } = handData;
+            const primaryColor = role === 'lead' ? '#38bdf8' : '#c084fc';
+            const secondaryColor = role === 'lead' ? '#818cf8' : '#f472b6';
+
+            ctx.save();
+
+            // Glowing Constellation Skeleton
+            ctx.lineWidth = 2.6;
+            ctx.strokeStyle = primaryColor;
+            ctx.shadowColor = primaryColor;
+            ctx.shadowBlur = 15;
+
+            ctx.beginPath();
+            for (const [i, j] of HAND_CONNECTIONS_PAIRS) {
+                const p1 = mappedLandmarks[i];
+                const p2 = mappedLandmarks[j];
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+            }
+            ctx.stroke();
+
+            // Joint Stars
+            for (let i = 0; i < mappedLandmarks.length; i++) {
+                const pt = mappedLandmarks[i];
+                const isTip = [4, 8, 12, 16, 20].includes(i);
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, isTip ? 5.2 : 3, 0, Math.PI * 2);
+                ctx.fillStyle = isTip ? '#ffffff' : secondaryColor;
+                ctx.fill();
+            }
+
+            // Palm Nebula Aura
+            const palmX = (mappedLandmarks[0].x + mappedLandmarks[9].x) * 0.5;
+            const palmY = (mappedLandmarks[0].y + mappedLandmarks[9].y) * 0.5;
+
+            const auraGrad = ctx.createRadialGradient(palmX, palmY, 4, palmX, palmY, 56);
+            auraGrad.addColorStop(0, role === 'lead' ? 'rgba(56, 189, 248, 0.28)' : 'rgba(192, 132, 252, 0.28)');
+            auraGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = auraGrad;
+            ctx.beginPath();
+            ctx.arc(palmX, palmY, 56, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pinch Energy Beam & Volume Halo on Right Hand
+            if (role === 'lead') {
+                const thumbPt = mappedLandmarks[4];
+                const indexPt = mappedLandmarks[8];
+
+                ctx.beginPath();
+                ctx.moveTo(thumbPt.x, thumbPt.y);
+                ctx.lineTo(indexPt.x, indexPt.y);
+                ctx.strokeStyle = isPinching ? '#ffffff' : 'rgba(56, 189, 248, 0.55)';
+                ctx.lineWidth = isPinching ? 3.5 : 1.5;
+                ctx.stroke();
+
+                if (isPinching) {
+                    const orbRadius = (26 + 14 * state.rightHandVol) + 5 * Math.sin(time * 0.008);
+                    const grad = ctx.createRadialGradient(pinchX, pinchY, 2, pinchX, pinchY, orbRadius);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.35, '#38bdf8');
+                    grad.addColorStop(0.7, 'rgba(192, 132, 252, 0.45)');
+                    grad.addColorStop(1, 'rgba(192, 132, 252, 0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(pinchX, pinchY, orbRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Floating HUD Pill near wrist
+            const wristPt = mappedLandmarks[0];
+            const pillY = Math.min(canvas.height - 30, wristPt.y + 32);
+            ctx.shadowBlur = 0;
+            ctx.font = 'bold 11px "JetBrains Mono", monospace';
+            const textWidth = ctx.measureText(infoText).width;
+            ctx.fillStyle = 'rgba(10, 14, 28, 0.85)';
+            ctx.strokeStyle = primaryColor;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(wristPt.x - textWidth / 2 - 10, pillY - 12, textWidth + 20, 22, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(infoText, wristPt.x, pillY - 1);
+
+            ctx.restore();
+        }
+
+        function renderLoop(timestamp) {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. Deep Cosmic Gradient Background
+            const bgGrad = ctx.createLinearGradient(0, 0, w, h);
+            bgGrad.addColorStop(0, '#03040c');
+            bgGrad.addColorStop(0.5, '#080c22');
+            bgGrad.addColorStop(1, '#040510');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, w, h);
+
+            // 2. Twinkling Stars
+            ctx.save();
+            for (const s of state.stars) {
+                s.y -= s.speed;
+                if (s.y < 0) s.y = 1;
+                const alpha = 0.25 + 0.55 * Math.sin(timestamp * 0.002 + s.phase);
+                ctx.fillStyle = `rgba(199, 210, 254, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(s.x * w, s.y * h, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // 3. Draw Aspect-Cover Camera Feed (Aligned with mapVideoToCanvas)
+            if (state.cameraActive && videoElem.readyState >= 2) {
+                updateVideoCoverMetrics();
+                const { scaledW, scaledH, offsetX, offsetY } = state.videoTransform;
+
+                ctx.save();
+                ctx.globalAlpha = state.camOpacity;
+                if (state.facingMode === 'user') {
+                    ctx.translate(w, 0);
+                    ctx.scale(-1, 1);
+                }
+                ctx.drawImage(videoElem, offsetX, offsetY, scaledW, scaledH);
+                ctx.restore();
+            }
+
+            // 4. Bottom Aurora Spectrum Ribbon
+            if (ambientEngine.analyser) {
+                const freqBins = ambientEngine.analyser.frequencyBinCount;
+                const freqData = new Uint8Array(freqBins);
+                ambientEngine.analyser.getByteFrequencyData(freqData);
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.moveTo(0, h);
+                const usableBins = Math.floor(freqBins * 0.65);
+                for (let i = 0; i < usableBins; i++) {
+                    const x = (i / (usableBins - 1)) * w;
+                    const val = freqData[i] / 255.0;
+                    const y = h - val * (h * 0.26);
+                    ctx.lineTo(x, y);
+                }
+                ctx.lineTo(w, h);
+                ctx.closePath();
+
+                const auroraGrad = ctx.createLinearGradient(0, h * 0.72, 0, h);
+                auroraGrad.addColorStop(0, 'rgba(56, 189, 248, 0.22)');
+                auroraGrad.addColorStop(0.5, 'rgba(192, 132, 252, 0.14)');
+                auroraGrad.addColorStop(1, 'rgba(129, 140, 248, 0.02)');
+                ctx.fillStyle = auroraGrad;
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 5. Harmonic Scale Pitch Lanes
+            const totalNotes = state.scaleNotes.length;
+            const topMargin = h * 0.08;
+            const usableHeight = h * 0.80;
+            const laneHeight = usableHeight / totalNotes;
+
+            for (let i = 0; i < totalNotes; i++) {
+                const noteIndex = totalNotes - 1 - i;
+                const noteObj = state.scaleNotes[noteIndex];
+                const laneY = topMargin + i * laneHeight;
+                const isActiveLane = state.leadActive && state.leadLaneIndex === noteIndex;
+
+                if (isActiveLane) {
+                    const laneGrad = ctx.createLinearGradient(0, laneY, w, laneY);
+                    laneGrad.addColorStop(0, 'rgba(56, 189, 248, 0.04)');
+                    laneGrad.addColorStop(0.5, 'rgba(129, 140, 248, 0.24)');
+                    laneGrad.addColorStop(1, 'rgba(192, 132, 252, 0.08)');
+                    ctx.fillStyle = laneGrad;
+                    ctx.fillRect(0, laneY, w, laneHeight);
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(0, laneY);
+                ctx.lineTo(w, laneY);
+                ctx.strokeStyle = isActiveLane ? 'rgba(56, 189, 248, 0.55)' : 'rgba(255, 255, 255, 0.05)';
+                ctx.lineWidth = isActiveLane ? 1.5 : 1;
+                ctx.stroke();
+
+                ctx.font = isActiveLane ? 'bold 12px "JetBrains Mono", monospace' : '10px "JetBrains Mono", monospace';
+                ctx.fillStyle = isActiveLane ? '#38bdf8' : 'rgba(148, 163, 184, 0.42)';
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${noteObj.label}`, w - 12, laneY + laneHeight / 2);
+            }
+
+            // 6. Sonic Ripples
+            for (let i = state.ripples.length - 1; i >= 0; i--) {
+                const r = state.ripples[i];
+                r.radius += 2.2;
+                r.alpha -= 0.018;
+                if (r.alpha <= 0) {
+                    state.ripples.splice(i, 1);
+                    continue;
+                }
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = r.color;
+                ctx.globalAlpha = r.alpha;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 7. Update & Draw Touch/Mouse Orb OR Camera Hands
+            if (!state.cameraActive) {
+                const px = state.pointerX * w;
+                const py = state.pointerY * h;
+                const { index, note } = getNoteFromNormalizedY(state.pointerY);
+
+                triggerOrUpdateAmbientNote(state.pointerDown, index, note, state.pointerX, px, py);
+
+                ctx.save();
+                const orbRadius = state.pointerDown ? 30 + 5 * Math.sin(timestamp * 0.006) : 16;
+                const orbGrad = ctx.createRadialGradient(px, py, 2, px, py, orbRadius);
+                orbGrad.addColorStop(0, '#ffffff');
+                orbGrad.addColorStop(0.4, state.pointerDown ? '#38bdf8' : 'rgba(129, 140, 248, 0.6)');
+                orbGrad.addColorStop(1, 'rgba(192, 132, 252, 0)');
+                ctx.fillStyle = orbGrad;
+                ctx.beginPath();
+                ctx.arc(px, py, orbRadius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else {
+                for (const hand of state.detectedHands) {
+                    drawEtherealHand(hand, timestamp);
+                }
+            }
+
+            // 8. Floating Stardust Particles
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= 0.018;
+
+                if (p.alpha <= 0) {
+                    state.particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 9. Desktop Oscilloscope
+            if (scopeCtx && ambientEngine.analyser) {
+                const sw = scopeCanvas.width;
+                const sh = scopeCanvas.height;
+                const bufferLength = ambientEngine.analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                ambientEngine.analyser.getByteTimeDomainData(dataArray);
+
+                scopeCtx.clearRect(0, 0, sw, sh);
+                scopeCtx.lineWidth = 2;
+                scopeCtx.strokeStyle = state.leadActive ? '#38bdf8' : '#c084fc';
+                scopeCtx.beginPath();
+
+                const sliceWidth = sw / bufferLength;
+                let x = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = (v * sh) / 2;
+                    if (i === 0) scopeCtx.moveTo(x, y);
+                    else scopeCtx.lineTo(x, y);
+                    x += sliceWidth;
+                }
+                scopeCtx.stroke();
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        requestAnimationFrame(renderLoop);
+
+        /********************************************************************
+         * 7. MOBILE-OPTIMIZED CAMERA & MEDIAPIPE HANDS PIPELINE
+         * Uses native getUserMedia with portrait/landscape support & fallbacks
+         ********************************************************************/
+        let handsInstance = null;
+        let mediaStream = null;
+        let isProcessingFrame = false;
+
+        function onMediaPipeResults(results) {
+            state.detectedHands = [];
+
+            let foundLeadHand = false;
+            let foundChordHand = false;
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const rawLandmarks = results.multiHandLandmarks[i];
+                    const handedness = results.multiHandedness[i] ? results.multiHandedness[i].label : 'Right';
+
+                    // Map all 21 landmarks accurately onto the mobile/desktop aspect-cover canvas
+                    const mappedLandmarks = rawLandmarks.map(lm => mapVideoToCanvas(lm.x, lm.y));
+                    const wristCanvasNormX = mappedLandmarks[0].normX;
+
+                    let role = 'lead';
+                    if (results.multiHandLandmarks.length === 1) {
+                        role = (handedness === 'Right' && wristCanvasNormX < 0.35) ? 'chord' : 'lead';
+                    } else {
+                        role = (handedness === 'Left' || wristCanvasNormX >= 0.48) ? 'lead' : 'chord';
+                    }
+
+                    if (role === 'lead' && foundLeadHand) role = 'chord';
+                    if (role === 'chord' && foundChordHand) role = 'lead';
+
+                    if (role === 'lead') {
+                        foundLeadHand = true;
+                        const thumbTipRaw = rawLandmarks[4];
+                        const indexTipRaw = rawLandmarks[8];
+                        const pinchDist = distance2D(thumbTipRaw, indexTipRaw);
+                        const isPinching = state.playMode === 'air_float' ? true : (pinchDist < 0.075);
+
+                        const thumbMapped = mappedLandmarks[4];
+                        const indexMapped = mappedLandmarks[8];
+                        const pinchX = (thumbMapped.x + indexMapped.x) * 0.5;
+                        const pinchY = (thumbMapped.y + indexMapped.y) * 0.5;
+                        const normX = (thumbMapped.normX + indexMapped.normX) * 0.5;
+                        const normY = (thumbMapped.normY + indexMapped.normY) * 0.5;
+
+                        const { index, note } = getNoteFromNormalizedY(normY);
+
+                        triggerOrUpdateAmbientNote(isPinching, index, note, normX, pinchX, pinchY);
+
+                        state.detectedHands.push({
+                            mappedLandmarks,
+                            role: 'lead',
+                            isPinching,
+                            pinchX,
+                            pinchY,
+                            infoText: isPinching ? `✦ ${note.label} (${Math.round(note.freq)}Hz)` : `PINCH (${note.label})`
+                        });
+                    } else {
+                        foundChordHand = true;
+                        const fingers = countRaisedFingers(rawLandmarks);
+                        ambientEngine.setPadChord(fingers);
+                        const chordName = fingers > 0 && state.chordList[fingers - 1]
+                            ? state.chordList[fingers - 1].name
+                            : 'SILENT';
+
+                        state.detectedHands.push({
+                            mappedLandmarks,
+                            role: 'chord',
+                            isPinching: false,
+                            pinchX: 0,
+                            pinchY: 0,
+                            infoText: `PAD: ${chordName} [${fingers}]`
+                        });
+                    }
+                }
+            }
+
+            if (!foundLeadHand) {
+                triggerOrUpdateAmbientNote(false, -1, null, state.filterNorm, 0, 0);
+            }
+        }
+
+        async function processCameraFrameLoop() {
+            if (!state.cameraActive) return;
+
+            if (videoElem.readyState >= 2 && handsInstance && !isProcessingFrame) {
+                isProcessingFrame = true;
+                try {
+                    await handsInstance.send({ image: videoElem });
+                } catch (err) {
+                    console.warn('Frame processing warning:', err);
+                }
+                isProcessingFrame = false;
+            }
+
+            if (state.cameraActive) {
+                requestAnimationFrame(processCameraFrameLoop);
+            }
+        }
+
+        async function startCameraStream() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(t => t.stop());
+                mediaStream = null;
+            }
+
+            // Progressive constraint fallbacks so every mobile & desktop camera works reliably
+            const constraintCandidates = [
+                { video: { facingMode: { ideal: state.facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+                { video: { facingMode: state.facingMode }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            let lastErr = null;
+            for (const constraints of constraintCandidates) {
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    break;
+                } catch (err) {
+                    lastErr = err;
+                }
+            }
+
+            if (!mediaStream) {
+                throw lastErr || new Error('Camera unavailable');
+            }
+
+            videoElem.srcObject = mediaStream;
+            await new Promise((resolve) => {
+                videoElem.onloadedmetadata = () => {
+                    videoElem.play().then(resolve).catch(resolve);
+                };
+            });
+
+            updateVideoCoverMetrics();
+        }
+
+        async function toggleCameraTracking() {
+            ambientEngine.init();
+            const btnText = document.getElementById('camera-btn-text');
+            const flipBtn = document.getElementById('btn-flip-cam');
+            const badge = document.getElementById('status-badge');
+            const dot = document.getElementById('tracking-dot');
+
+            if (state.cameraActive) {
+                state.cameraActive = false;
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(t => t.stop());
+                    mediaStream = null;
+                }
+                videoElem.srcObject = null;
+                state.detectedHands = [];
+                triggerOrUpdateAmbientNote(false, -1, null, state.filterNorm, 0, 0);
+
+                btnText.textContent = 'روشن کردن دوربین';
+                flipBtn.classList.add('hidden');
+                badge.textContent = 'لمسی / موس';
+                badge.className = 'text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 whitespace-nowrap';
+                dot.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]';
+                showToast('دوربین خاموش شد. حالت لمسی/موس فعال است.');
+                return;
+            }
+
+            try {
+                btnText.textContent = 'در حال اتصال...';
+                showToast('در حال فعال‌سازی دوربین و هوش مصنوعی تشخیص دست...');
+
+                if (!handsInstance) {
+                    handsInstance = new Hands({
+                        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                    });
+                    handsInstance.setOptions({
+                        maxNumHands: 2,
+                        modelComplexity: 1,
+                        minDetectionConfidence: 0.62,
+                        minTrackingConfidence: 0.62
+                    });
+                    handsInstance.onResults(onMediaPipeResults);
+                }
+
+                await startCameraStream();
+                state.cameraActive = true;
+
+                btnText.textContent = 'خاموش کردن دوربین';
+                flipBtn.classList.remove('hidden');
+                badge.textContent = 'تشخیص زنده دست (AI)';
+                badge.className = 'text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 whitespace-nowrap';
+                dot.className = 'absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
+                showToast('دوربین فعال شد! دست راست = ملودی، دست چپ = پد آکورد 🖐️✨');
+
+                requestAnimationFrame(processCameraFrameLoop);
+            } catch (err) {
+                console.error('Camera Error:', err);
+                state.cameraActive = false;
+                btnText.textContent = 'روشن کردن دوربین';
+                showToast('دسترسی به دوربین امکان‌پذیر نشد. می‌توانید با لمس صفحه بنوازید.');
+            }
+        }
+
+        // Flip Front/Back Camera on Mobile
+        document.getElementById('btn-flip-cam').addEventListener('click', async () => {
+            if (!state.cameraActive) return;
+            state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+            showToast(state.facingMode === 'user' ? 'دوربین سلفی (جلو) فعال شد' : 'دوربین اصلی (پشت) فعال شد');
+            try {
+                await startCameraStream();
+            } catch (e) {}
+        });
+
+        /********************************************************************
+         * 8. INTERACTIVE TACTILE ROTARY KNOBS & MUTE BUTTONS
+         ********************************************************************/
+        const CIRCUMFERENCE = 163.36; // 2 * PI * 26
+
+        function setKnobVisual(wrapper, val) {
+            const min = parseFloat(wrapper.dataset.min || '0');
+            const max = parseFloat(wrapper.dataset.max || '100');
+            const clamped = Math.max(min, Math.min(max, Math.round(val)));
+            wrapper.dataset.val = clamped;
+
+            const norm = (clamped - min) / (max - min);
+            const arc = wrapper.querySelector('.knob-arc');
+            if (arc) {
+                arc.style.strokeDashoffset = (CIRCUMFERENCE * (1 - norm)).toFixed(2);
+            }
+
+            const knobType = wrapper.dataset.knob;
+            const labelEl = document.getElementById(`knob-val-${knobType}`);
+            if (labelEl) {
+                if ((knobType === 'rightVol' && state.rightMuted) || (knobType === 'leftVol' && state.leftMuted)) {
+                    labelEl.textContent = 'MUTE';
+                } else {
+                    labelEl.textContent = `${clamped}%`;
+                }
+            }
+
+            // Apply to Audio Engine
+            if (knobType === 'rightVol') {
+                state.rightHandVol = norm;
+                ambientEngine.updateRightHandVolume();
+            } else if (knobType === 'leftVol') {
+                state.leftHandVol = norm;
+                ambientEngine.updateLeftHandVolume();
+            } else if (knobType === 'reverb') {
+                state.reverbMix = norm;
+                ambientEngine.updateReverbMix(norm);
+            } else if (knobType === 'shimmer') {
+                state.shimmerMix = norm;
+                ambientEngine.updateShimmerAndDelayMix(norm);
+            }
+        }
+
+        document.querySelectorAll('.rotary-knob-wrapper').forEach(wrapper => {
+            let dragging = false;
+            let startY = 0;
+            let startVal = parseFloat(wrapper.dataset.val || '80');
+            let lastTap = 0;
+
+            wrapper.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                ambientEngine.init();
+
+                // Double-tap / Double-click resets knob to default value
+                const now = Date.now();
+                if (now - lastTap < 300) {
+                    const defVal = parseFloat(wrapper.dataset.default || '80');
+                    setKnobVisual(wrapper, defVal);
+                    showToast('ناب به مقدار پیش‌فرض بازگشت');
+                    lastTap = 0;
+                    return;
+                }
+                lastTap = now;
+
+                dragging = true;
+                startY = e.clientY;
+                startVal = parseFloat(wrapper.dataset.val || '80');
+                wrapper.setPointerCapture(e.pointerId);
+            });
+
+            wrapper.addEventListener('pointermove', (e) => {
+                if (!dragging) return;
+                e.stopPropagation();
+                const deltaY = startY - e.clientY; // Drag up = increase, Drag down = decrease
+                const newVal = startVal + deltaY * 0.65;
+                setKnobVisual(wrapper, newVal);
+            });
+
+            const stopDrag = (e) => {
+                if (!dragging) return;
+                dragging = false;
+                try { wrapper.releasePointerCapture(e.pointerId); } catch (err) {}
+            };
+
+            wrapper.addEventListener('pointerup', stopDrag);
+            wrapper.addEventListener('pointercancel', stopDrag);
+
+            // Mouse wheel support on desktop
+            wrapper.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                ambientEngine.init();
+                const current = parseFloat(wrapper.dataset.val || '80');
+                const step = e.deltaY < 0 ? 4 : -4;
+                setKnobVisual(wrapper, current + step);
+            }, { passive: false });
+        });
+
+        // Right-Hand Mute Toggle Button
+        document.getElementById('btn-mute-right').addEventListener('click', () => {
+            ambientEngine.init();
+            state.rightMuted = !state.rightMuted;
+            const btn = document.getElementById('btn-mute-right');
+            const wrapper = document.querySelector('[data-knob="rightVol"]');
+            btn.innerHTML = state.rightMuted
+                ? '<i class="ph-fill ph-speaker-slash text-xs text-rose-400"></i>'
+                : '<i class="ph-fill ph-speaker-high text-xs"></i>';
+            setKnobVisual(wrapper, parseFloat(wrapper.dataset.val));
+            showToast(state.rightMuted ? 'صدای دست راست (ملودی) قطع شد' : 'صدای دست راست (ملودی) وصل شد');
+        });
+
+        // Left-Hand Mute Toggle Button
+        document.getElementById('btn-mute-left').addEventListener('click', () => {
+            ambientEngine.init();
+            state.leftMuted = !state.leftMuted;
+            const btn = document.getElementById('btn-mute-left');
+            const wrapper = document.querySelector('[data-knob="leftVol"]');
+            btn.innerHTML = state.leftMuted
+                ? '<i class="ph-fill ph-speaker-slash text-xs text-rose-400"></i>'
+                : '<i class="ph-fill ph-speaker-high text-xs"></i>';
+            setKnobVisual(wrapper, parseFloat(wrapper.dataset.val));
+            showToast(state.leftMuted ? 'صدای دست چپ (پد آکورد) قطع شد' : 'صدای دست چپ (پد آکورد) وصل شد');
+        });
+
+        /********************************************************************
+         * 9. UI NAVIGATION, MOBILE TABS, ZEN MODE & TOUCH INTERACTION
+         ********************************************************************/
+        function showToast(message) {
+            const box = document.getElementById('toast-box');
+            const txt = document.getElementById('toast-text');
+            txt.textContent = message;
+            box.classList.remove('opacity-0', '-translate-y-2');
+            box.classList.add('opacity-100', 'translate-y-0');
+            clearTimeout(window._toastTimer);
+            window._toastTimer = setTimeout(() => {
+                box.classList.remove('opacity-100', 'translate-y-0');
+                box.classList.add('opacity-0', '-translate-y-2');
+            }, 3000);
+        }
+
+        function updateChordPadHighlight(activeIdx) {
+            document.querySelectorAll('.chord-pad-btn').forEach(btn => {
+                const idx = parseInt(btn.getAttribute('data-chord-idx'), 10);
+                if (idx === activeIdx && activeIdx > 0) {
+                    btn.classList.add('bg-purple-500/40', 'border-purple-300', 'shadow-[0_0_14px_rgba(192,132,252,0.5)]');
+                } else {
+                    btn.classList.remove('bg-purple-500/40', 'border-purple-300', 'shadow-[0_0_14px_rgba(192,132,252,0.5)]');
+                }
+            });
+        }
+
+        // Mobile Console Tabs (Switch between Rotary Knobs vs Synth Settings on small screens)
+        const tabMixer = document.getElementById('tab-btn-mixer');
+        const tabSynth = document.getElementById('tab-btn-synth');
+        const panelMixer = document.getElementById('panel-mixer');
+        const panelSynth = document.getElementById('panel-synth');
+
+        tabMixer.addEventListener('click', () => {
+            panelMixer.classList.remove('hidden');
+            panelMixer.classList.add('grid');
+            panelSynth.classList.add('hidden');
+            tabMixer.className = 'px-3 py-1 rounded-xl text-xs font-bold bg-cyan-400/20 text-cyan-200 border border-cyan-400/40 flex items-center gap-1.5 transition';
+            tabSynth.className = 'px-3 py-1 rounded-xl text-xs font-semibold bg-white/5 text-slate-300 border border-transparent hover:bg-white/10 flex items-center gap-1.5 transition lg:hidden';
+        });
+
+        tabSynth.addEventListener('click', () => {
+            panelSynth.classList.remove('hidden');
+            panelSynth.classList.add('grid');
+            panelMixer.classList.add('hidden');
+            tabSynth.className = 'px-3 py-1 rounded-xl text-xs font-bold bg-purple-400/20 text-purple-200 border border-purple-400/40 flex items-center gap-1.5 transition lg:hidden';
+            tabMixer.className = 'px-3 py-1 rounded-xl text-xs font-semibold bg-white/5 text-slate-300 border border-transparent hover:bg-white/10 flex items-center gap-1.5 transition';
+        });
+
+        // Minimize / Expand Bottom Studio Dock
+        let dockMinimized = false;
+        document.getElementById('btn-minimize-dock').addEventListener('click', () => {
+            dockMinimized = !dockMinimized;
+            const body = document.getElementById('dock-body');
+            const txt = document.getElementById('minimize-text');
+            const icon = document.getElementById('minimize-icon');
+            if (dockMinimized) {
+                body.classList.add('hidden');
+                txt.textContent = 'باز کردن پنل';
+                icon.className = 'ph-bold ph-caret-up text-xs';
+            } else {
+                body.classList.remove('hidden');
+                txt.textContent = 'جمع کردن پنل';
+                icon.className = 'ph-bold ph-caret-down text-xs';
+            }
+        });
+
+        // Zen / Instagram Reels Recording Mode (Hides UI chrome for clean video recording)
+        const uiHeader = document.getElementById('ui-header');
+        const studioDock = document.getElementById('studio-dock');
+        const btnExitZen = document.getElementById('btn-exit-zen');
+
+        document.getElementById('btn-zen').addEventListener('click', () => {
+            uiHeader.classList.add('opacity-0', 'pointer-events-none', '-translate-y-full');
+            studioDock.classList.add('opacity-0', 'pointer-events-none', 'translate-y-full');
+            btnExitZen.classList.remove('hidden');
+            showToast('حالت ریلز اینستاگرام فعال شد ✨');
+        });
+
+        btnExitZen.addEventListener('click', () => {
+            uiHeader.classList.remove('opacity-0', 'pointer-events-none', '-translate-y-full');
+            studioDock.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-full');
+            btnExitZen.classList.add('hidden');
+        });
+
+        // Canvas Pointer (Multi-device Touch & Mouse)
+        function updatePointerCoords(clientX, clientY) {
+            state.pointerX = Math.max(0, Math.min(1, clientX / window.innerWidth));
+            state.pointerY = Math.max(0, Math.min(1, clientY / window.innerHeight));
+        }
+
+        canvas.addEventListener('pointerdown', (e) => {
+            ambientEngine.init();
+            state.pointerDown = true;
+            updatePointerCoords(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (state.pointerDown || !('ontouchstart' in window)) {
+                updatePointerCoords(e.clientX, e.clientY);
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            state.pointerDown = false;
+        });
+
+        window.addEventListener('pointercancel', () => {
+            state.pointerDown = false;
+        });
+
+        // Chord Pad Buttons
+        document.querySelectorAll('.chord-pad-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                ambientEngine.init();
+                const idx = parseInt(btn.getAttribute('data-chord-idx'), 10);
+                ambientEngine.setPadChord(idx);
+            });
+        });
+
+        // Keyboard Shortcuts (1-5 for Chords, 0/Space to Fade)
+        window.addEventListener('keydown', (e) => {
+            if (['1', '2', '3', '4', '5'].includes(e.key)) {
+                ambientEngine.init();
+                ambientEngine.setPadChord(parseInt(e.key, 10));
+            } else if (e.key === '0' || e.code === 'Space') {
+                if (ambientEngine.isInitialized) {
+                    ambientEngine.setPadChord(0);
+                }
+            }
+        });
+
+        // Synth Selectors & Sliders
+        document.getElementById('select-preset').addEventListener('change', (e) => {
+            state.presetKey = e.target.value;
+            showToast('بافت صدای امبینت تغییر کرد ✨');
+        });
+
+        document.getElementById('select-root').addEventListener('change', (e) => {
+            state.rootNote = e.target.value;
+            rebuildMusicalScale();
+        });
+
+        document.getElementById('select-scale').addEventListener('change', (e) => {
+            state.scaleKey = e.target.value;
+            rebuildMusicalScale();
+        });
+
+        document.getElementById('select-play-mode').addEventListener('change', (e) => {
+            state.playMode = e.target.value;
+            showToast(state.playMode === 'air_float'
+                ? 'حالت شناور فعال شد: فقط دست راست را حرکت دهید!'
+                : 'حالت نیشگون (Pinch): شست و اشاره را به هم نزدیک کنید.');
+        });
+
+        document.getElementById('slider-swell').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10) / 10;
+            state.releaseTail = val;
+            document.getElementById('val-swell').textContent = `${val.toFixed(1)}s`;
+        });
+
+        // Help Modal & Start Actions
+        const helpModal = document.getElementById('help-modal');
+        document.getElementById('btn-help').addEventListener('click', () => {
+            helpModal.classList.remove('hidden');
+        });
+        document.getElementById('btn-close-help').addEventListener('click', () => {
+            ambientEngine.init();
+            helpModal.classList.add('hidden');
+        });
+        document.getElementById('btn-start-touch').addEventListener('click', () => {
+            ambientEngine.init();
+            ambientEngine.setPadChord(1);
+            helpModal.classList.add('hidden');
+            showToast('پد آکورد فضایی فعال شد! انگشت یا موس را روی صفحه بکشید ✨');
+        });
+        document.getElementById('btn-start-with-cam').addEventListener('click', () => {
+            ambientEngine.init();
+            ambientEngine.setPadChord(1);
+            helpModal.classList.add('hidden');
+            if (!state.cameraActive) {
+                toggleCameraTracking();
+            }
+        });
+        document.getElementById('btn-camera').addEventListener('click', toggleCameraTracking);
+
+        // Initialize Default Scale
+        rebuildMusicalScale();
+    </script>
+</body>
+</html>
